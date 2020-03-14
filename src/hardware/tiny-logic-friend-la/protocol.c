@@ -20,7 +20,7 @@
 #include <config.h>
 #include "protocol.h"
 
-SR_PRIV int send_shortcommand(struct sr_serial_dev_inst *serial,
+SR_PRIV int p_tlf_send_shortcommand(struct sr_serial_dev_inst *serial,
 		uint8_t command)
 {
 	char buf[1];
@@ -36,7 +36,7 @@ SR_PRIV int send_shortcommand(struct sr_serial_dev_inst *serial,
 	return SR_OK;
 }
 
-SR_PRIV int send_longcommand(struct sr_serial_dev_inst *serial,
+SR_PRIV int p_tlf_send_longcommand(struct sr_serial_dev_inst *serial,
 		uint8_t command, uint8_t *data)
 {
 	char buf[5];
@@ -57,12 +57,12 @@ SR_PRIV int send_longcommand(struct sr_serial_dev_inst *serial,
 	return SR_OK;
 }
 
-SR_PRIV int ols_send_reset(struct sr_serial_dev_inst *serial)
+SR_PRIV int tlf_send_reset(struct sr_serial_dev_inst *serial)
 {
 	unsigned int i;
 
 	for (i = 0; i < 5; i++) {
-		if (send_shortcommand(serial, CMD_RESET) != SR_OK)
+		if (p_tlf_send_shortcommand(serial, CMD_RESET) != SR_OK)
 			return SR_ERR;
 	}
 
@@ -70,7 +70,7 @@ SR_PRIV int ols_send_reset(struct sr_serial_dev_inst *serial)
 }
 
 /* Configures the channel mask based on which channels are enabled. */
-SR_PRIV void ols_channel_mask(const struct sr_dev_inst *sdi)
+SR_PRIV void tlf_channel_mask(const struct sr_dev_inst *sdi)
 {
 	struct dev_context *devc;
 	struct sr_channel *channel;
@@ -86,7 +86,7 @@ SR_PRIV void ols_channel_mask(const struct sr_dev_inst *sdi)
 	}
 }
 
-SR_PRIV int ols_convert_trigger(const struct sr_dev_inst *sdi)
+SR_PRIV int tlf_convert_trigger(const struct sr_dev_inst *sdi)
 {
 	struct dev_context *devc;
 	struct sr_trigger *trigger;
@@ -129,7 +129,7 @@ SR_PRIV int ols_convert_trigger(const struct sr_dev_inst *sdi)
 	return SR_OK;
 }
 
-SR_PRIV struct dev_context *ols_dev_new(void)
+SR_PRIV struct dev_context *tlf_dev_new(void)
 {
 	struct dev_context *devc;
 
@@ -146,19 +146,19 @@ SR_PRIV struct dev_context *ols_dev_new(void)
 	return devc;
 }
 
-static void ols_channel_new(struct sr_dev_inst *sdi, int num_chan)
+static void tlf_channel_new(struct sr_dev_inst *sdi, int num_chan)
 {
 	struct dev_context *devc = sdi->priv;
 	int i;
 
 	for (i = 0; i < num_chan; i++)
 		sr_channel_new(sdi, i, SR_CHANNEL_LOGIC, TRUE,
-				ols_channel_names[i]);
+				tlf_channel_names[i]);
 
 	devc->max_channels = num_chan;
 }
 
-SR_PRIV struct sr_dev_inst *get_metadata(struct sr_serial_dev_inst *serial)
+SR_PRIV struct sr_dev_inst *p_tlf_get_metadata(struct sr_serial_dev_inst *serial)
 {
 	struct sr_dev_inst *sdi;
 	struct dev_context *devc;
@@ -170,7 +170,7 @@ SR_PRIV struct sr_dev_inst *get_metadata(struct sr_serial_dev_inst *serial)
 
 	sdi = g_malloc0(sizeof(struct sr_dev_inst));
 	sdi->status = SR_ST_INACTIVE;
-	devc = ols_dev_new();
+	devc = tlf_dev_new();
 	sdi->priv = devc;
 
 	devname = g_string_new("");
@@ -233,7 +233,7 @@ SR_PRIV struct sr_dev_inst *get_metadata(struct sr_serial_dev_inst *serial)
 			switch (token) {
 			case 0x00:
 				/* Number of usable channels */
-				ols_channel_new(sdi, tmp_int);
+				tlf_channel_new(sdi, tmp_int);
 				break;
 			case 0x01:
 				/* Amount of sample memory available (bytes) */
@@ -267,7 +267,7 @@ SR_PRIV struct sr_dev_inst *get_metadata(struct sr_serial_dev_inst *serial)
 			switch (token) {
 			case 0x00:
 				/* Number of usable channels */
-				ols_channel_new(sdi, tmp_c);
+				tlf_channel_new(sdi, tmp_c);
 				break;
 			case 0x01:
 				/* protocol version */
@@ -290,7 +290,7 @@ SR_PRIV struct sr_dev_inst *get_metadata(struct sr_serial_dev_inst *serial)
 			case 0x00:
 			    /* Channel info. Name is empty if it's blank. */
 			    /* 8-bit unsigned integer for channel, 8-bit unsigned for group,  NULL-terminated string */
-				ols_channel_new(sdi, tmp_c);
+				tlf_channel_new(sdi, tmp_c);
 				break;
 			default:
 				sr_info("Unknown token 0x%.2x: 0x%.2x.",
@@ -312,9 +312,11 @@ SR_PRIV struct sr_dev_inst *get_metadata(struct sr_serial_dev_inst *serial)
 	return sdi;
 }
 
-SR_PRIV int ols_set_samplerate(const struct sr_dev_inst *sdi,
+SR_PRIV int tlf_set_samplerate(const struct sr_dev_inst *sdi,
 		const uint64_t samplerate)
 {
+		sr_info("In set samplerate. %" PRIu64, sdi);
+
 	struct dev_context *devc;
 
 	devc = sdi->priv;
@@ -346,7 +348,7 @@ SR_PRIV int ols_set_samplerate(const struct sr_dev_inst *sdi,
 	return SR_OK;
 }
 
-SR_PRIV void abort_acquisition(const struct sr_dev_inst *sdi)
+SR_PRIV void p_tlf_abort_acquisition(const struct sr_dev_inst *sdi)
 {
 	struct sr_serial_dev_inst *serial;
 
@@ -356,7 +358,7 @@ SR_PRIV void abort_acquisition(const struct sr_dev_inst *sdi)
 	std_session_send_df_end(sdi);
 }
 
-SR_PRIV int ols_receive_data(int fd, int revents, void *cb_data)
+SR_PRIV int tlf_receive_data(int fd, int revents, void *cb_data)
 {
 	struct dev_context *devc;
 	struct sr_dev_inst *sdi;
@@ -364,177 +366,98 @@ SR_PRIV int ols_receive_data(int fd, int revents, void *cb_data)
 	struct sr_datafeed_packet packet;
 	struct sr_datafeed_logic logic;
 	uint32_t sample;
-	int num_ols_changrp, offset, j;
-	unsigned int i;
-	unsigned char byte;
+	int offset, j;
+	unsigned int pending_samples;
+	unsigned int buffer_size = 256;
 
 	(void)fd;
+
+	//sr_dbg("receiving data");
 
 	sdi = cb_data;
 	serial = sdi->conn;
 	devc = sdi->priv;
 
-	if (devc->num_transfers == 0 && revents == 0) {
-		/* Ignore timeouts as long as we haven't received anything */
-		return TRUE;
-	}
+	if (revents == 0) {
+		if (devc->num_transfers == 0) {
+			/* Ignore timeouts as long as we haven't received anything */
+			return TRUE;
+		} else {
+			/* Free everything. */
+			g_free(devc->raw_sample_buf);
 
-	if (devc->num_transfers++ == 0) {
-		devc->raw_sample_buf = g_try_malloc(devc->limit_samples * 4);
+			serial_flush(serial);
+			p_tlf_abort_acquisition(sdi);
+
+			return TRUE;
+		}
+	}
+	size_t pending = serial_has_receive_data(serial);
+
+	// The first pair of bytes is the first sample. We won't know how long it lasts until we get
+	// another sample.
+	if (devc->num_transfers == 0) {
+		if (pending < 2) {
+			// Keep waiting.
+			return TRUE;
+		}
+		if (serial_read_nonblocking(serial, &devc->last_sample, 2) != 2) {
+			sr_err("nothing read");
+			return FALSE;
+		}
+		sr_spew("Received first sample %d.", devc->last_sample);
+
+		devc->raw_sample_buf = g_try_malloc(buffer_size * 2);
 		if (!devc->raw_sample_buf) {
 			sr_err("Sample buffer malloc failed.");
 			return FALSE;
 		}
 		/* fill with 1010... for debugging */
-		memset(devc->raw_sample_buf, 0x82, devc->limit_samples * 4);
+		memset(devc->raw_sample_buf, 0x82, buffer_size * 2);
+		devc->num_transfers++;
 	}
 
-	num_ols_changrp = 0;
-	for (i = 0x20; i > 0x02; i >>= 1) {
-		if ((devc->flag_reg & i) == 0) {
-			num_ols_changrp++;
-		}
-	}
-
-	if (revents == G_IO_IN && devc->num_samples < devc->limit_samples) {
-		if (serial_read_nonblocking(serial, &byte, 1) != 1)
+	packet.type = SR_DF_LOGIC;
+	packet.payload = &logic;
+	logic.unitsize = 2;
+	logic.data = devc->raw_sample_buf;
+	pending_samples = 0;
+	while (serial_has_receive_data(serial) > 4) {
+		uint16_t sample_count;
+		if (serial_read_nonblocking(serial, &sample_count, 2) != 2) {
+			sr_err("unable to read sample count");
 			return FALSE;
-		devc->cnt_bytes++;
-
-		/* Ignore it if we've read enough. */
-		if (devc->num_samples >= devc->limit_samples)
-			return TRUE;
-
-		devc->sample[devc->num_bytes++] = byte;
-		sr_spew("Received byte 0x%.2x.", byte);
-		if (devc->num_bytes == num_ols_changrp) {
-			devc->cnt_samples++;
-			devc->cnt_samples_rle++;
-			/*
-			 * Got a full sample. Convert from the OLS's little-endian
-			 * sample to the local format.
-			 */
-			sample = devc->sample[0] | (devc->sample[1] << 8) \
-					| (devc->sample[2] << 16) | (devc->sample[3] << 24);
-			sr_dbg("Received sample 0x%.*x.", devc->num_bytes * 2, sample);
-			if (devc->flag_reg & FLAG_RLE) {
-				/*
-				 * In RLE mode the high bit of the sample is the
-				 * "count" flag, meaning this sample is the number
-				 * of times the previous sample occurred.
-				 */
-				if (devc->sample[devc->num_bytes - 1] & 0x80) {
-					/* Clear the high bit. */
-					sample &= ~(0x80 << (devc->num_bytes - 1) * 8);
-					devc->rle_count = sample;
-					devc->cnt_samples_rle += devc->rle_count;
-					sr_dbg("RLE count: %u.", devc->rle_count);
-					devc->num_bytes = 0;
-					return TRUE;
-				}
-			}
-			devc->num_samples += devc->rle_count + 1;
-			if (devc->num_samples > devc->limit_samples) {
-				/* Save us from overrunning the buffer. */
-				devc->rle_count -= devc->num_samples - devc->limit_samples;
-				devc->num_samples = devc->limit_samples;
-			}
-
-			if (num_ols_changrp < 4) {
-				/*
-				 * Some channel groups may have been turned
-				 * off, to speed up transfer between the
-				 * hardware and the PC. Expand that here before
-				 * submitting it over the session bus --
-				 * whatever is listening on the bus will be
-				 * expecting a full 32-bit sample, based on
-				 * the number of channels.
-				 */
-				j = 0;
-				memset(devc->tmp_sample, 0, 4);
-				for (i = 0; i < 4; i++) {
-					if (((devc->flag_reg >> 2) & (1 << i)) == 0) {
-						/*
-						 * This channel group was
-						 * enabled, copy from received
-						 * sample.
-						 */
-						devc->tmp_sample[i] = devc->sample[j++];
-					} else if (devc->flag_reg & FLAG_DEMUX && (i > 2)) {
-						/* group 2 & 3 get added to 0 & 1 */
-						devc->tmp_sample[i - 2] = devc->sample[j++];
-					}
-				}
-				memcpy(devc->sample, devc->tmp_sample, 4);
-				sr_spew("Expanded sample: 0x%.8x.", sample);
-			}
-
-			/*
-			 * the OLS sends its sample buffer backwards.
-			 * store it in reverse order here, so we can dump
-			 * this on the session bus later.
-			 */
-			offset = (devc->limit_samples - devc->num_samples) * 4;
-			for (i = 0; i <= devc->rle_count; i++) {
-				memcpy(devc->raw_sample_buf + offset + (i * 4),
-				       devc->sample, 4);
-			}
-			memset(devc->sample, 0, 4);
-			devc->num_bytes = 0;
-			devc->rle_count = 0;
 		}
-	} else {
-		/*
-		 * This is the main loop telling us a timeout was reached, or
-		 * we've acquired all the samples we asked for -- we're done.
-		 * Send the (properly-ordered) buffer to the frontend.
-		 */
-		sr_dbg("Received %d bytes, %d samples, %d decompressed samples.",
-				devc->cnt_bytes, devc->cnt_samples,
-				devc->cnt_samples_rle);
-		if (devc->trigger_at != -1) {
-			/*
-			 * A trigger was set up, so we need to tell the frontend
-			 * about it.
-			 */
-			if (devc->trigger_at > 0) {
-				/* There are pre-trigger samples, send those first. */
-				packet.type = SR_DF_LOGIC;
-				packet.payload = &logic;
-				logic.length = devc->trigger_at * 4;
-				logic.unitsize = 4;
-				logic.data = devc->raw_sample_buf +
-					(devc->limit_samples - devc->num_samples) * 4;
+		sr_spew("Received sample count %d.", sample_count);
+		// TODO: Handle if the sample count is >> buffer_size. No need to copy
+		// data into it more than once.
+		for (size_t i = 0; i < sample_count; i++) {
+			((uint16_t*) devc->raw_sample_buf)[pending_samples] = devc->last_sample;
+			devc->num_samples++;
+			pending_samples++;
+
+			if (pending_samples == buffer_size) {
+				logic.length = pending_samples * 2;
 				sr_session_send(sdi, &packet);
+				pending_samples = 0;
 			}
-
-			/* Send the trigger. */
-			packet.type = SR_DF_TRIGGER;
-			sr_session_send(sdi, &packet);
-
-			/* Send post-trigger samples. */
-			packet.type = SR_DF_LOGIC;
-			packet.payload = &logic;
-			logic.length = (devc->num_samples * 4) - (devc->trigger_at * 4);
-			logic.unitsize = 4;
-			logic.data = devc->raw_sample_buf + devc->trigger_at * 4 +
-				(devc->limit_samples - devc->num_samples) * 4;
-			sr_session_send(sdi, &packet);
-		} else {
-			/* no trigger was used */
-			packet.type = SR_DF_LOGIC;
-			packet.payload = &logic;
-			logic.length = devc->num_samples * 4;
-			logic.unitsize = 4;
-			logic.data = devc->raw_sample_buf +
-				(devc->limit_samples - devc->num_samples) * 4;
-			sr_session_send(sdi, &packet);
 		}
-		g_free(devc->raw_sample_buf);
 
-		serial_flush(serial);
-		abort_acquisition(sdi);
+		if (serial_read_nonblocking(serial, &devc->last_sample, 2) != 2) {
+			sr_err("unable to read next sample");
+			return FALSE;
+		}
+		devc->num_transfers++;
+		sr_spew("Received sample %x.", devc->last_sample);
 	}
+
+
+	if (pending_samples > 0) {
+		logic.length = pending_samples * 2;
+		sr_session_send(sdi, &packet);
+	}
+
+	// sr_spew("passing back to outer loop");
 
 	return TRUE;
 }

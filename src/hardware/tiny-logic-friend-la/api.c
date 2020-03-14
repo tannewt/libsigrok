@@ -33,13 +33,8 @@ static const uint32_t drvopts[] = {
 
 static const uint32_t devopts[] = {
 	SR_CONF_LIMIT_SAMPLES | SR_CONF_GET | SR_CONF_SET | SR_CONF_LIST,
-	SR_CONF_SAMPLERATE | SR_CONF_GET | SR_CONF_SET | SR_CONF_LIST,
-	SR_CONF_TRIGGER_MATCH | SR_CONF_LIST,
-	SR_CONF_CAPTURE_RATIO | SR_CONF_GET | SR_CONF_SET,
+	SR_CONF_SAMPLERATE | SR_CONF_GET,
 	SR_CONF_EXTERNAL_CLOCK | SR_CONF_SET,
-	SR_CONF_PATTERN_MODE | SR_CONF_GET | SR_CONF_SET | SR_CONF_LIST,
-	SR_CONF_SWAP | SR_CONF_SET,
-	SR_CONF_RLE | SR_CONF_GET | SR_CONF_SET,
 };
 
 static const int32_t trigger_matches[] = {
@@ -70,7 +65,7 @@ static const char *patterns[] = {
 };
 
 /* Channels are numbered 0-31 (on the PCB silkscreen). */
-SR_PRIV const char *ols_channel_names[] = {
+SR_PRIV const char *tlf_channel_names[] = {
 	"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12",
 	"13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23",
 	"24", "25", "26", "27", "28", "29", "30", "31",
@@ -126,12 +121,12 @@ static GSList *scan(struct sr_dev_driver *di, GSList *options)
 	if (serial_open(serial, SERIAL_RDWR) != SR_OK)
 		return NULL;
 
-	if (ols_send_reset(serial) != SR_OK) {
+	if (tlf_send_reset(serial) != SR_OK) {
 		serial_close(serial);
 		sr_err("Could not use port %s. Quitting.", conn);
 		return NULL;
 	}
-	send_shortcommand(serial, CMD_ID);
+	p_tlf_send_shortcommand(serial, CMD_ID);
 
 	g_usleep(RESPONSE_DELAY_US);
 
@@ -155,16 +150,16 @@ static GSList *scan(struct sr_dev_driver *di, GSList *options)
 	/* Definitely using the OLS protocol, check if it supports
 	 * the metadata command.
 	 */
-	send_shortcommand(serial, CMD_METADATA);
+	p_tlf_send_shortcommand(serial, CMD_METADATA);
 
 	g_usleep(RESPONSE_DELAY_US);
 
 	if (serial_has_receive_data(serial) != 0) {
 		/* Got metadata. */
-		sdi = get_metadata(serial);
+		sdi = p_tlf_get_metadata(serial);
 	}
 	/* Configure samplerate and divider. */
-	if (ols_set_samplerate(sdi, DEFAULT_SAMPLERATE) != SR_OK)
+	if (tlf_set_samplerate(sdi, DEFAULT_SAMPLERATE) != SR_OK)
 		sr_dbg("Failed to set default samplerate (%"PRIu64").",
 				DEFAULT_SAMPLERATE);
 	sdi->inst_type = SR_INST_SERIAL;
@@ -179,6 +174,7 @@ static int config_get(uint32_t key, GVariant **data,
 	const struct sr_dev_inst *sdi, const struct sr_channel_group *cg)
 {
 	struct dev_context *devc;
+	sr_dbg("config_get");
 
 	(void)cg;
 
@@ -222,6 +218,7 @@ static int config_set(uint32_t key, GVariant *data,
 	uint16_t flag;
 	uint64_t tmp_u64;
 	const char *stropt;
+	sr_dbg("config_set");
 
 	(void)cg;
 
@@ -232,7 +229,7 @@ static int config_set(uint32_t key, GVariant *data,
 		tmp_u64 = g_variant_get_uint64(data);
 		if (tmp_u64 < samplerates[0] || tmp_u64 > samplerates[1])
 			return SR_ERR_SAMPLERATE;
-		return ols_set_samplerate(sdi, g_variant_get_uint64(data));
+		return tlf_set_samplerate(sdi, g_variant_get_uint64(data));
 	case SR_CONF_LIMIT_SAMPLES:
 		tmp_u64 = g_variant_get_uint64(data);
 		if (tmp_u64 < MIN_NUM_SAMPLES)
@@ -306,7 +303,8 @@ static int config_list(uint32_t key, GVariant **data,
 	const struct sr_dev_inst *sdi, const struct sr_channel_group *cg)
 {
 	struct dev_context *devc;
-	int num_ols_changrp, i;
+	int num_tlf_changrp, i;
+	sr_dbg("config_list %d 0x%x", key, key);
 
 	switch (key) {
 	case SR_CONF_SCAN_OPTIONS:
@@ -334,17 +332,18 @@ static int config_list(uint32_t key, GVariant **data,
 		 * Channel groups are turned off if no channels in that group are
 		 * enabled, making more room for samples for the enabled group.
 		*/
-		ols_channel_mask(sdi);
-		num_ols_changrp = 0;
+		tlf_channel_mask(sdi);
+		num_tlf_changrp = 0;
 		for (i = 0; i < 4; i++) {
 			if (devc->channel_mask & (0xff << (i * 8)))
-				num_ols_changrp++;
+				num_tlf_changrp++;
 		}
 
 		*data = std_gvar_tuple_u64(MIN_NUM_SAMPLES,
-			(num_ols_changrp) ? devc->max_samples / num_ols_changrp : MIN_NUM_SAMPLES);
+			(num_tlf_changrp) ? devc->max_samples / num_tlf_changrp : MIN_NUM_SAMPLES);
 		break;
 	default:
+		sr_dbg("returned error on list");
 		return SR_ERR_NA;
 	}
 
@@ -357,6 +356,8 @@ static int set_trigger(const struct sr_dev_inst *sdi, int stage)
 	struct sr_serial_dev_inst *serial;
 	uint8_t cmd, arg[4];
 
+	sr_dbg("Set trigger TLF");
+
 	devc = sdi->priv;
 	serial = sdi->conn;
 
@@ -365,7 +366,7 @@ static int set_trigger(const struct sr_dev_inst *sdi, int stage)
 	arg[1] = (devc->trigger_mask[stage] >> 8) & 0xff;
 	arg[2] = (devc->trigger_mask[stage] >> 16) & 0xff;
 	arg[3] = (devc->trigger_mask[stage] >> 24) & 0xff;
-	if (send_longcommand(serial, cmd, arg) != SR_OK)
+	if (p_tlf_send_longcommand(serial, cmd, arg) != SR_OK)
 		return SR_ERR;
 
 	cmd = CMD_SET_TRIGGER_VALUE + stage * 4;
@@ -373,7 +374,7 @@ static int set_trigger(const struct sr_dev_inst *sdi, int stage)
 	arg[1] = (devc->trigger_value[stage] >> 8) & 0xff;
 	arg[2] = (devc->trigger_value[stage] >> 16) & 0xff;
 	arg[3] = (devc->trigger_value[stage] >> 24) & 0xff;
-	if (send_longcommand(serial, cmd, arg) != SR_OK)
+	if (p_tlf_send_longcommand(serial, cmd, arg) != SR_OK)
 		return SR_ERR;
 
 	cmd = CMD_SET_TRIGGER_CONFIG + stage * 4;
@@ -382,7 +383,7 @@ static int set_trigger(const struct sr_dev_inst *sdi, int stage)
 	if (stage == devc->num_stages)
 		/* Last stage, fire when this one matches. */
 		arg[3] |= TRIGGER_START;
-	if (send_longcommand(serial, cmd, arg) != SR_OK)
+	if (p_tlf_send_longcommand(serial, cmd, arg) != SR_OK)
 		return SR_ERR;
 
 	return SR_OK;
@@ -393,21 +394,23 @@ static int dev_acquisition_start(const struct sr_dev_inst *sdi)
 	struct dev_context *devc;
 	struct sr_serial_dev_inst *serial;
 	uint32_t samplecount, readcount, delaycount;
-	uint8_t ols_changrp_mask, arg[4];
-	int num_ols_changrp;
+	uint8_t tlf_changrp_mask, arg[4];
+	int num_tlf_changrp;
 	int ret, i;
+
+	sr_dbg("Start acquisition TLF");
 
 	devc = sdi->priv;
 	serial = sdi->conn;
 
-	ols_channel_mask(sdi);
+	tlf_channel_mask(sdi);
 
-	num_ols_changrp = 0;
-	ols_changrp_mask = 0;
+	num_tlf_changrp = 0;
+	tlf_changrp_mask = 0;
 	for (i = 0; i < 4; i++) {
 		if (devc->channel_mask & (0xff << (i * 8))) {
-			ols_changrp_mask |= (1 << i);
-			num_ols_changrp++;
+			tlf_changrp_mask |= (1 << i);
+			num_tlf_changrp++;
 		}
 	}
 
@@ -415,11 +418,11 @@ static int dev_acquisition_start(const struct sr_dev_inst *sdi)
 	 * Limit readcount to prevent reading past the end of the hardware
 	 * buffer. Rather read too many samples than too few.
 	 */
-	samplecount = MIN(devc->max_samples / num_ols_changrp, devc->limit_samples);
+	samplecount = MIN(devc->max_samples / num_tlf_changrp, devc->limit_samples);
 	readcount = (samplecount + 3) / 4;
 
 	/* Basic triggers. */
-	if (ols_convert_trigger(sdi) != SR_OK) {
+	if (tlf_convert_trigger(sdi) != SR_OK) {
 		sr_err("Failed to configure channels.");
 		return SR_ERR;
 	}
@@ -429,7 +432,7 @@ static int dev_acquisition_start(const struct sr_dev_inst *sdi)
 		 * reset command must be send prior each arm command
 		 */
 		sr_dbg("Send reset command before trigger configure");
-		if (ols_send_reset(serial) != SR_OK)
+		if (tlf_send_reset(serial) != SR_OK)
 			return SR_ERR;
 
 		delaycount = readcount * (1 - devc->capture_ratio / 100.0);
@@ -454,7 +457,7 @@ static int dev_acquisition_start(const struct sr_dev_inst *sdi)
 	arg[1] = (devc->cur_samplerate_divider & 0xff00) >> 8;
 	arg[2] = (devc->cur_samplerate_divider & 0xff0000) >> 16;
 	arg[3] = 0x00;
-	if (send_longcommand(serial, CMD_SET_DIVIDER, arg) != SR_OK)
+	if (p_tlf_send_longcommand(serial, CMD_SET_DIVIDER, arg) != SR_OK)
 		return SR_ERR;
 
 	/* Send sample limit and pre/post-trigger capture ratio. */
@@ -466,20 +469,20 @@ static int dev_acquisition_start(const struct sr_dev_inst *sdi)
 		arg[1] = ((readcount - 1) & 0xff00) >> 8;
 		arg[2] = ((readcount - 1) & 0xff0000) >> 16;
 		arg[3] = ((readcount - 1) & 0xff000000) >> 24;
-		if (send_longcommand(serial, CMD_CAPTURE_READCOUNT, arg) != SR_OK)
+		if (p_tlf_send_longcommand(serial, CMD_CAPTURE_READCOUNT, arg) != SR_OK)
 			return SR_ERR;
 		arg[0] = ((delaycount - 1) & 0xff);
 		arg[1] = ((delaycount - 1) & 0xff00) >> 8;
 		arg[2] = ((delaycount - 1) & 0xff0000) >> 16;
 		arg[3] = ((delaycount - 1) & 0xff000000) >> 24;
-		if (send_longcommand(serial, CMD_CAPTURE_DELAYCOUNT, arg) != SR_OK)
+		if (p_tlf_send_longcommand(serial, CMD_CAPTURE_DELAYCOUNT, arg) != SR_OK)
 			return SR_ERR;
 	} else {
 		arg[0] = ((readcount - 1) & 0xff);
 		arg[1] = ((readcount - 1) & 0xff00) >> 8;
 		arg[2] = ((delaycount - 1) & 0xff);
 		arg[3] = ((delaycount - 1) & 0xff00) >> 8;
-		if (send_longcommand(serial, CMD_CAPTURE_SIZE, arg) != SR_OK)
+		if (p_tlf_send_longcommand(serial, CMD_CAPTURE_SIZE, arg) != SR_OK)
 			return SR_ERR;
 	}
 
@@ -494,42 +497,42 @@ static int dev_acquisition_start(const struct sr_dev_inst *sdi)
 	 * Enable/disable OLS channel groups in the flag register according
 	 * to the channel mask. 1 means "disable channel".
 	 */
-	devc->flag_reg |= ~(ols_changrp_mask << 2) & 0x3c;
+	devc->flag_reg |= ~(tlf_changrp_mask << 2) & 0x3c;
 	arg[0] = devc->flag_reg & 0xff;
 	arg[1] = devc->flag_reg >> 8;
 	arg[2] = arg[3] = 0x00;
-	if (send_longcommand(serial, CMD_SET_FLAGS, arg) != SR_OK)
+	if (p_tlf_send_longcommand(serial, CMD_SET_FLAGS, arg) != SR_OK)
 		return SR_ERR;
 
 	/* Start acquisition on the device. */
-	if (send_shortcommand(serial, CMD_RUN) != SR_OK)
+	sr_dbg("Sending RUN command");
+	if (p_tlf_send_shortcommand(serial, CMD_RUN) != SR_OK)
 		return SR_ERR;
 
 	/* Reset all operational states. */
-	devc->rle_count = devc->num_transfers = 0;
-	devc->num_samples = devc->num_bytes = 0;
-	devc->cnt_bytes = devc->cnt_samples = devc->cnt_samples_rle = 0;
-	memset(devc->sample, 0, 4);
+	devc->num_transfers = 0;
+	devc->num_samples = 0;
 
 	std_session_send_df_header(sdi);
 
 	/* If the device stops sending for longer than it takes to send a byte,
 	 * that means it's finished. But wait at least 100 ms to be safe.
 	 */
-	serial_source_add(sdi->session, serial, G_IO_IN, 100,
-			ols_receive_data, (struct sr_dev_inst *)sdi);
+	serial_source_add(sdi->session, serial, G_IO_IN, 10000,
+			tlf_receive_data, (struct sr_dev_inst *)sdi);
 
 	return SR_OK;
 }
 
 static int dev_acquisition_stop(struct sr_dev_inst *sdi)
 {
-	abort_acquisition(sdi);
+	sr_dbg("Stop acquisition");
+	p_tlf_abort_acquisition(sdi);
 
 	return SR_OK;
 }
 
-static struct sr_dev_driver ols_driver_info = {
+static struct sr_dev_driver tlf_driver_info = {
 	.name = "tlf",
 	.longname = "Tiny Logic Friend",
 	.api_version = 1,
@@ -547,4 +550,4 @@ static struct sr_dev_driver ols_driver_info = {
 	.dev_acquisition_stop = dev_acquisition_stop,
 	.context = NULL,
 };
-SR_REGISTER_DEV_DRIVER(ols_driver_info);
+SR_REGISTER_DEV_DRIVER(tlf_driver_info);

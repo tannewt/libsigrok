@@ -17,8 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef LIBSIGROK_HARDWARE_OPENBENCH_LOGIC_SNIFFER_PROTOCOL_H
-#define LIBSIGROK_HARDWARE_OPENBENCH_LOGIC_SNIFFER_PROTOCOL_H
+#ifndef LIBSIGROK_HARDWARE_TINY_LOGIC_FRIEND_PROTOCOL_H
+#define LIBSIGROK_HARDWARE_TINY_LOGIC_FRIEND_PROTOCOL_H
 
 #include <stdint.h>
 #include <string.h>
@@ -26,7 +26,7 @@
 #include <libsigrok/libsigrok.h>
 #include "libsigrok-internal.h"
 
-#define LOG_PREFIX "openbench-logic-sniffer"
+#define LOG_PREFIX "tiny-logic-friend"
 
 #define NUM_TRIGGER_STAGES         4
 #define CLOCK_RATE                 SR_MHZ(100)
@@ -85,31 +85,25 @@ struct dev_context {
 
 	unsigned int num_transfers;
 	unsigned int num_samples;
-	int num_bytes;
-	int cnt_bytes;
-	int cnt_samples;
-	int cnt_samples_rle;
 
-	unsigned int rle_count;
-	unsigned char sample[4];
-	unsigned char tmp_sample[4];
+	uint16_t last_sample;
 	unsigned char *raw_sample_buf;
 };
 
-SR_PRIV extern const char *ols_channel_names[];
+SR_PRIV extern const char *tlf_channel_names[];
 
-SR_PRIV int send_shortcommand(struct sr_serial_dev_inst *serial,
+SR_PRIV int p_tlf_send_shortcommand(struct sr_serial_dev_inst *serial,
 		uint8_t command);
-SR_PRIV int send_longcommand(struct sr_serial_dev_inst *serial,
+SR_PRIV int p_tlf_send_longcommand(struct sr_serial_dev_inst *serial,
 		uint8_t command, uint8_t *data);
-SR_PRIV int ols_send_reset(struct sr_serial_dev_inst *serial);
-SR_PRIV void ols_channel_mask(const struct sr_dev_inst *sdi);
-SR_PRIV int ols_convert_trigger(const struct sr_dev_inst *sdi);
-SR_PRIV struct dev_context *ols_dev_new(void);
-SR_PRIV struct sr_dev_inst *get_metadata(struct sr_serial_dev_inst *serial);
-SR_PRIV int ols_set_samplerate(const struct sr_dev_inst *sdi,
+SR_PRIV int tlf_send_reset(struct sr_serial_dev_inst *serial);
+SR_PRIV void tlf_channel_mask(const struct sr_dev_inst *sdi);
+SR_PRIV int tlf_convert_trigger(const struct sr_dev_inst *sdi);
+SR_PRIV struct dev_context *tlf_dev_new(void);
+SR_PRIV struct sr_dev_inst *p_tlf_get_metadata(struct sr_serial_dev_inst *serial);
+SR_PRIV int tlf_set_samplerate(const struct sr_dev_inst *sdi,
 		uint64_t samplerate);
-SR_PRIV void abort_acquisition(const struct sr_dev_inst *sdi);
-SR_PRIV int ols_receive_data(int fd, int revents, void *cb_data);
+SR_PRIV void p_tlf_abort_acquisition(const struct sr_dev_inst *sdi);
+SR_PRIV int tlf_receive_data(int fd, int revents, void *cb_data);
 
 #endif
